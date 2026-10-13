@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CodeArchaeologist — ask why your code exists</title>
+<meta name="description" content="Ask why any line of code is the way it is, answered from your repo's real history. Plus a time machine, change preview, and a repo-history adventure game.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<nav><div class="wrap nav-in">
+  <a href="index.html"><div class="logo"><span class="mk">&lt;/&gt;</span>CodeArchaeologist</div></a>
+  <div class="nav-links"><a href="explore.html">Explore</a><a href="timemachine.html">Time Machine</a><a href="preview.html">Preview</a><a href="quest.html">Quest</a></div>
+  <div class="nav-right"><a href="demo.html" class="btn btn-sm">▶ Play demo</a><a href="explore.html" class="btn btn-fill btn-sm">Connect a repo</a></div>
+</div></nav>
+
+<header class="hero"><div class="wrap hero-grid">
+  <div>
+    <span class="eyebrow">git archaeology, for humans</span>
+    <h1>Ask <span class="g">why</span> any line of code exists.</h1>
+    <p class="lead">Point it at a GitHub repo and ask the questions git-blame can't answer. CodeArchaeologist reconstructs the reasoning from commits, pull requests and issues — and shows you the receipts.</p>
+    <div class="cta-row">
+      <a href="explore.html" class="btn btn-fill">Start exploring →</a>
+      <a href="demo.html" class="btn">▶ Watch the demo</a>
+      <a href="quest.html" class="btn">Play the Quest</a>
+    </div>
+    <form class="repo-inp" onsubmit="go(event)"><span class="pre mono">github.com/</span><input class="mono" id="repoInput" value="facebook/react" autocomplete="off"><button type="submit">Dig</button></form>
+  </div>
+
+  <div class="win">
+    <div class="chrome"><i class="r"></i><i class="y"></i><i class="g"></i><span class="title mono">queue.ts — react</span></div>
+    <div class="ide">
+      <div class="tree"><div class="d">src</div><div class="f on">queue.ts</div><div class="f">index.ts</div><div class="f">worker.ts</div><div class="d">tests</div><div class="f">queue.test.ts</div></div>
+      <div>
+        <div class="code">
+          <div><span class="num">39</span><span class="cm">// writes go through a queue</span></div>
+          <div><span class="num">40</span><span class="kw">async function</span> <span class="fn">write</span>(x) {</div>
+          <div class="hl"><span class="num">41</span>  <span class="kw">await</span> queue.<span class="fn">add</span>(x) <span class="gut">  ◂ why?</span></div>
+          <div><span class="num">42</span>}</div>
+        </div>
+        <div class="term">
+          <div><span class="q">why?&gt;</span> why does write() go through a queue<span class="cur" id="cur"></span></div>
+          <div class="a" id="ans">Added in PR #412 (2023) to fix a race where two workers wrote at once and corrupted state. The queue serialises writes so updates can't interleave.</div>
+          <div class="src" id="src">◴ <span class="sha">a3f91c2</span>&nbsp; fix: serialise concurrent writes&nbsp; · closes #398</div>
+        </div>
+        <div class="status"><span>⎇ main</span><span>archaeology: on</span><span id="statusq">answering…</span></div>
+      </div>
+    </div>
+  </div>
+</div></header>
+
+<section class="section"><div class="wrap">
+  <div class="sec-head">
+    <div class="k">// seven ways to read history</div>
+    <h2>Not just <span style="color:var(--violet-2)">what</span> changed — <span style="color:var(--green-2)">why</span>.</h2>
+    <p>Everything is grounded in the repo's real commits, pull requests and issues, with links you can open.</p>
+  </div>
+  <div class="fgrid">
+    <a href="explore.html#fence" class="fcard"><span class="new">NEW</span><div class="tag">guardrail</div><div class="ic" style="color:var(--red);background:rgba(248,81,73,.08)">⚠</div><h3>Chesterton's Fence Guard</h3><p>Before you change or delete code, it tells you why it exists and what breaks if you remove it.</p></a>
+    <a href="timemachine.html" class="fcard"><span class="new">NEW</span><div class="tag">time travel</div><div class="ic" style="color:var(--blue);background:rgba(88,166,255,.08)">⏱</div><h3>Line Time-Machine</h3><p>Scrub one line through its entire history and read the reasoning at every layer.</p></a>
+    <a href="timemachine.html#whatif" class="fcard"><span class="new">NEW</span><div class="tag">what-if</div><div class="ic" style="color:var(--violet-2);background:rgba(163,113,247,.08)">⑂</div><h3>Alternate History</h3><p>"What if they hadn't done this?" — it reasons about what would have gone wrong.</p></a>
+    <a href="explore.html#fossil" class="fcard"><div class="tag">cleanup</div><div class="ic" style="color:var(--orange);background:rgba(240,136,62,.08)">🦴</div><h3>Fossil Finder</h3><p>Finds dead and orphaned code and tells you the story of the feature it's left over from.</p></a>
+    <a href="explore.html#busfactor" class="fcard"><div class="tag">risk</div><div class="ic" style="color:var(--pink);background:rgba(247,120,186,.08)">◉</div><h3>Bus-Factor Map</h3><p>Highlights code only one person ever touched — the knowledge about to walk out the door.</p></a>
+    <a href="preview.html" class="fcard"><span class="new">NEW</span><div class="tag">preview</div><div class="ic" style="color:var(--green-2);background:rgba(126,231,135,.08)">◱</div><h3>Change Preview</h3><p>See how the site would look after a change — a real render for static sites, a mock for the rest.</p></a>
+    <a href="quest.html" class="fcard"><div class="tag">play + learn</div><div class="ic" style="color:#ffd23f;background:rgba(255,210,63,.08)">⛏</div><h3>Repo Quest</h3><p>A 3D tomb adventure where each checkpoint uncovers a real piece of your repo's history.</p></a>
+  </div>
+</div></section>
+
+<section class="closer"><div class="wrap">
+  <h2>Your codebase has a <span class="g">memory</span>.<br>Go read it.</h2>
+  <p>Free. Works on any public GitHub repo. No install.</p>
+  <div class="cta-row" style="justify-content:center"><a href="explore.html" class="btn btn-fill" style="font-size:16px;padding:14px 26px">Connect a repo →</a><a href="demo.html" class="btn" style="font-size:16px;padding:14px 26px">▶ Play the demo</a></div>
+</div></section>
+
+<footer><div class="wrap foot-in"><span>CODEARCHAEOLOGIST · git archaeology for humans</span><span>grounded in real commits · PRs · issues</span><span>v0.1</span></div></footer>
+
+<script src="app.js"></script>
+<script>
+function go(e){ e.preventDefault(); var v=$("repoInput").value.trim(); if(v){ CA.setRepo(v); location.href="explore.html"; } }
+(function(){
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduce){$("ans").classList.add('show');$("src").classList.add('show');$("statusq").textContent='done';return;}
+  setTimeout(function(){$("cur").style.display='none';$("ans").classList.add('show');},900);
+  setTimeout(function(){$("src").classList.add('show');},1500);
+  setTimeout(function(){$("statusq").textContent='done · 1 source';},1700);
+})();
+</script>
+</body></html>

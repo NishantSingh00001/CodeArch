@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Change Preview — CodeArchaeologist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<nav><div class="wrap nav-in">
+  <a href="index.html"><div class="logo"><span class="mk">&lt;/&gt;</span>CodeArchaeologist</div></a>
+  <div class="nav-links"><a href="explore.html">Explore</a><a href="timemachine.html">Time Machine</a><a href="preview.html" class="active">Preview</a><a href="quest.html">Quest</a></div>
+  <div class="nav-right"><a href="demo.html" class="btn btn-sm">▶ Demo</a></div>
+</div></nav>
+
+<section class="apphead"><div class="wrap">
+  <div class="k">// see a change before you make it</div>
+  <h1>Change Preview</h1>
+  <p>For a static site, it fetches an HTML file, applies your described change, and renders a real <b>before / after</b>. For build-step apps it gives a predicted visual description instead.</p>
+  <div class="connectbar">
+    <form class="repo-inp" onsubmit="connect(event)"><span class="pre mono">github.com/</span><input class="mono" id="repoInput" placeholder="owner/repo" autocomplete="off"><button type="submit">Connect</button></form>
+    <span class="pill" id="repoPill" hidden>◴ <b id="repoName"></b></span>
+  </div>
+</div></section>
+
+<div class="wrap">
+  <div class="panelbox">
+    <div class="ph"><span>Preview a change</span><span class="mono" id="ctxInfo"></span></div>
+    <div class="pb">
+      <div class="qform" style="margin-bottom:10px">
+        <input id="pathInput" placeholder="HTML file path, e.g. index.html" value="index.html" style="flex:0 0 220px">
+        <input id="changeInput" placeholder="Describe the change — e.g. 'make the hero background dark and the button green'">
+        <button class="btn btn-fill" id="runBtn">Preview →</button>
+      </div>
+      <div class="suggest" id="suggest">
+        <button>make the headline bigger and centered</button>
+        <button>change the theme to dark mode</button>
+        <button>make all buttons rounded and purple</button>
+      </div>
+      <div id="out"></div>
+      <div class="note">It loads the file from <span class="mono">raw.githubusercontent.com</span>, so it works on public static sites. The rendered preview runs in a sandboxed frame with scripts disabled. Build-step apps (React/Vue) get an AI-predicted description, clearly labelled.</div>
+    </div>
+  </div>
+</div>
+
+<footer><div class="wrap foot-in"><span>CODEARCHAEOLOGIST</span><span>a prediction, verify before you ship</span><span class="mono">change preview</span></div></footer>
+
+<script src="app.js"></script>
+<script>
+var repo=null, branch="main", originalHtml="";
+$("suggest").querySelectorAll("button").forEach(function(b){b.onclick=function(){$("changeInput").value=b.textContent;};});
+function connect(e){if(e)e.preventDefault();var v=$("repoInput").value.trim();if(!v)return;CA.setRepo(v);loadRepo(v);}
+async function loadRepo(v){var p=CA.parseRepo(v);if(!p){showErr("Enter owner/repo.");return;}repo=p;$("ctxInfo").textContent="loading…";
+  try{var info=await CA.repoInfo(p.owner,p.repo);branch=info.default_branch||"main";$("repoPill").hidden=false;$("repoName").textContent=p.owner+"/"+p.repo;$("ctxInfo").textContent="connected";}
+  catch(err){$("ctxInfo").textContent="";showErr(err.message);}}
+
+$("runBtn").onclick=run;
+async function run(){
+  if(!repo){showErr("Connect a repo first.");return;}
+  var path=$("pathInput").value.trim()||"index.html", change=$("changeInput").value.trim();
+  if(!change){showErr("Describe the change you want to preview.");return;}
+  $("out").innerHTML='<div class="loadwrap"><div class="spin"></div><div>fetching '+esc(path)+' and applying your change…</div></div>';
+  try{
+    try{ originalHtml=await CA.rawFile(repo.owner,repo.repo,branch,path); }
+    catch(e){ originalHtml=""; }
+    if(originalHtml && /<html|<!doctype|<body|<div/i.test(originalHtml)){
+      var data=await CA.ai("preview",{repo:repo.owner+"/"+repo.repo,question:change,context:"ORIGINAL HTML DOCUMENT:\n"+originalHtml.slice(0,16000)});
+      if(data.changedHtml && data.changedHtml.length>40) renderReal(originalHtml, data.changedHtml, data);
+      else renderMock(data);
+    } else {
+      var d2=await CA.ai("preview",{repo:repo.owner+"/"+repo.repo,question:change,context:"This repo has no single static HTML file at "+path+" — it's likely a build-step app. Describe the predicted visual result of: "+change});
+      renderMock(d2, true);
+    }
+  }catch(err){ showErr(err.message+(/service|GEMINI|model|quota|rate/i.test(err.message)?"  —  No backend key yet? Use ▶ Demo.":"")); }
+}
+function renderReal(orig, changed, d){
+  $("out").innerHTML='<div class="answer"><div class="ah"><span class="badge ok">real render · '+esc(d.confidence||"MED")+' confidence</span><h3>Before / after</h3></div><div class="ab">'+
+    (d.summary?'<p class="summary">'+esc(d.summary)+'</p>':'')+
+    '<div class="prevgrid"><div class="prevframe"><div class="lbl">before</div><iframe sandbox="" id="fBefore"></iframe></div>'+
+    '<div class="prevframe"><div class="lbl">after (predicted)</div><iframe sandbox="" id="fAfter"></iframe></div></div>'+
+    '<div class="note">A sandboxed render of the AI\'s predicted change (scripts disabled). Treat it as a preview, not a guaranteed build.</div></div></div>';
+  $("fBefore").srcdoc=orig; $("fAfter").srcdoc=changed;
+}
+function renderMock(d, build){
+  var notes=(d.visualNotes||[]).map(function(n){return '<li>'+esc(n)+'</li>';}).join("");
+  $("out").innerHTML='<div class="answer"><div class="ah"><span class="badge warn">predicted · '+esc(d.confidence||"LOW")+' confidence</span><h3>'+(build?"Build-step app — predicted result":"Predicted change")+'</h3></div><div class="ab">'+
+    (d.summary?'<p class="summary">'+esc(d.summary)+'</p>':'')+(notes?'<ul class="pts">'+notes+'</ul>':'')+
+    '<div class="note">'+(build?"This repo needs a build step, so a pixel-accurate render isn't possible here — this is an AI prediction of the likely visual result.":"Couldn't render a live frame, so this is a described prediction.")+'</div></div></div>';
+}
+function showErr(m){$("out").innerHTML='<div class="errbox">'+esc(m)+'</div>';}
+(function(){var last=CA.lastRepo();if(last){$("repoInput").value=last;loadRepo(last);}})();
+</script>
+</body></html>

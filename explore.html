@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Explore — CodeArchaeologist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<nav><div class="wrap nav-in">
+  <a href="index.html"><div class="logo"><span class="mk">&lt;/&gt;</span>CodeArchaeologist</div></a>
+  <div class="nav-links"><a href="explore.html" class="active">Explore</a><a href="timemachine.html">Time Machine</a><a href="preview.html">Preview</a><a href="quest.html">Quest</a></div>
+  <div class="nav-right"><a href="demo.html" class="btn btn-sm">▶ Demo</a><button class="btn btn-sm" id="setBtn">⚙ Token</button></div>
+</div></nav>
+
+<section class="apphead"><div class="wrap">
+  <div class="k">// explore a repository</div>
+  <h1>Dig into a repo's history</h1>
+  <p>Connect a public GitHub repo, then ask why code exists, guard against risky deletions, find fossils, or map knowledge risk.</p>
+  <div class="connectbar">
+    <form class="repo-inp" onsubmit="connect(event)"><span class="pre mono">github.com/</span><input class="mono" id="repoInput" placeholder="owner/repo" autocomplete="off"><button type="submit">Connect</button></form>
+    <span class="pill" id="repoPill" hidden>◴ <b id="repoName"></b> · <span id="repoMeta"></span></span>
+  </div>
+</div></section>
+
+<div class="wrap">
+  <div class="modebar">
+    <button class="on" data-mode="why">◆ Ask why</button>
+    <button data-mode="fence">⚠ Fence Guard</button>
+    <button data-mode="fossil">🦴 Fossil Finder</button>
+    <button data-mode="busfactor">◉ Bus-Factor</button>
+  </div>
+
+  <div class="panelbox">
+    <div class="ph"><span id="phLabel">Ask why code exists</span><span class="mono" id="ctxInfo"></span></div>
+    <div class="pb">
+      <div class="qform">
+        <input id="qInput" placeholder="Ask a question, or a file path like src/queue.ts">
+        <button class="btn btn-fill" id="runBtn">Analyze →</button>
+      </div>
+      <div class="suggest" id="suggest"></div>
+      <div id="out"></div>
+      <div class="note" id="baseNote">Tip: connect a repo first. Without a GitHub token you get 60 requests/hour — add one in <b>⚙ Token</b> for 5,000/hour. No backend key? Use <b>▶ Demo</b> to see sample results.</div>
+    </div>
+  </div>
+</div>
+
+<footer><div class="wrap foot-in"><span>CODEARCHAEOLOGIST</span><span>grounded in real commits · PRs · issues</span><span class="mono">a reading of history, not gospel</span></div></footer>
+
+<div class="overlay" id="setModal" hidden><div class="modal">
+  <h3>GitHub token (optional)</h3>
+  <p>A personal access token raises your rate limit from 60 to 5,000 requests/hour. Create a <b>classic</b> token with no scopes (public data only) at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">github.com/settings/tokens</a>. It's stored only in your browser.</p>
+  <input id="tokenInput" placeholder="ghp_… (optional)" autocomplete="off">
+  <div style="display:flex;gap:10px"><button class="btn" id="setClose" style="flex:1;justify-content:center">Cancel</button><button class="btn btn-fill" id="setSave" style="flex:1;justify-content:center">Save</button></div>
+</div></div>
+
+<script src="app.js"></script>
+<script>
+var mode="why", repo=null, baseCtx="";
+var LABELS={why:"Ask why code exists",fence:"Chesterton's Fence Guard — what breaks if removed",fossil:"Fossil Finder — dead or orphaned code",busfactor:"Bus-Factor — knowledge risk"};
+var PLACE={why:"Ask a question, or a file path like src/queue.ts",fence:"Paste code or a file path you're about to change",fossil:"A file or function that might be dead code",busfactor:"A file path, or leave blank for the whole repo"};
+var SUG={
+  why:["Why does this project use a monorepo?","src/index.js","Why is there a retry here?"],
+  fence:["src/legacy/auth.js","Can I delete this polyfill?","the old caching layer"],
+  fossil:["src/experimental/","unused helpers","old feature flags"],
+  busfactor:["(whole repo)","src/core/","the build config"]
+};
+
+/* mode switching + deep-link */
+function setMode(m){ mode=m; document.querySelectorAll(".modebar button").forEach(function(b){b.classList.toggle("on",b.dataset.mode===m);});
+  $("phLabel").textContent=LABELS[m]; $("qInput").placeholder=PLACE[m];
+  $("suggest").innerHTML=SUG[m].map(function(s){return '<button>'+esc(s)+'</button>';}).join("");
+  $("suggest").querySelectorAll("button").forEach(function(b){b.onclick=function(){$("qInput").value=(b.textContent==="(whole repo)"?"":b.textContent);};});
+  $("out").innerHTML="";
+}
+document.querySelector(".modebar").addEventListener("click",function(e){var b=e.target.closest("button");if(b)setMode(b.dataset.mode);});
+if(location.hash){var h=location.hash.slice(1);if(LABELS[h])setMode(h);else setMode("why");}else setMode("why");
+
+/* connect repo */
+function connect(e){ if(e)e.preventDefault(); var v=$("repoInput").value.trim(); if(!v)return; CA.setRepo(v); loadRepo(v); }
+async function loadRepo(v){
+  var p=CA.parseRepo(v); if(!p){ showErr("Enter a repo like owner/repo."); return; }
+  repo=p; $("ctxInfo").textContent="loading "+p.owner+"/"+p.repo+"…";
+  try{
+    var info=await CA.repoInfo(p.owner,p.repo);
+    $("repoPill").hidden=false; $("repoName").textContent=p.owner+"/"+p.repo;
+    $("repoMeta").textContent="★ "+(info.stargazers_count||0).toLocaleString()+" · "+(info.language||"—");
+    $("ctxInfo").textContent="connected";
+    $("baseNote").innerHTML="Connected to <b>"+esc(p.owner+"/"+p.repo)+"</b>. Pick a mode and ask.";
+  }catch(err){ $("ctxInfo").textContent=""; showErr(err.message); }
+}
+
+/* build git context for the question */
+async function gatherContext(q){
+  var p=repo, lines=[];
+  // recent commits (repo-wide)
+  var path = q && /\.[a-z]{1,5}$/i.test(q.trim()) ? q.trim() : (q && q.indexOf("/")>-1 ? q.trim() : "");
+  var commits = await CA.commits(p.owner,p.repo, path?{per_page:20,path:path}:{per_page:25});
+  lines.push("RECENT COMMITS"+(path?" touching "+path:"")+":");
+  commits.forEach(function(c){ var m=(c.commit&&c.commit.message||"").split("\n")[0];
+    lines.push("- "+c.sha.slice(0,7)+" ("+fmtDate(c.commit.author.date)+", "+(c.commit.author.name||"?")+"): "+m); });
+  // issues/PRs
+  try{ var iss=await CA.searchIssues(p.owner,p.repo, path? path.split("/").pop().replace(/\.[a-z]+$/i,"") : (q||""));
+    if(iss.items&&iss.items.length){ lines.push("\nRELATED ISSUES / PRs:");
+      iss.items.slice(0,10).forEach(function(it){ lines.push("- "+(it.pull_request?"PR":"issue")+" #"+it.number+" ["+it.state+"]: "+it.title); }); }
+  }catch(e){}
+  // file snippet
+  if(path){ try{ var branch=(await CA.repoInfo(p.owner,p.repo)).default_branch||"main";
+    var txt=await CA.rawFile(p.owner,p.repo,branch,path); lines.push("\nFILE "+path+" (first 1500 chars):\n"+txt.slice(0,1500)); }catch(e){} }
+  // contributors for bus factor
+  if(mode==="busfactor"){ try{ var cons=await CA.contributors(p.owner,p.repo);
+    lines.push("\nTOP CONTRIBUTORS:"); cons.slice(0,12).forEach(function(c){ lines.push("- "+c.login+": "+c.contributions+" commits"); }); }catch(e){} }
+  return { context:lines.join("\n"), sources: commits.slice(0,4).map(function(c){return {label:(c.commit.message||"").split("\n")[0], url:c.html_url, sha:c.sha.slice(0,7)};}) };
+}
+
+/* run */
+$("runBtn").onclick=run;
+$("qInput").addEventListener("keydown",function(e){if(e.key==="Enter")run();});
+async function run(){
+  if(!repo){ showErr("Connect a repo first (top of the page)."); return; }
+  var q=$("qInput").value.trim();
+  var out=$("out");
+  out.innerHTML='<div class="loadwrap"><div class="spin"></div><div id="lt">reading git history…</div><div class="trace"><div class="ln on">→ fetching commits, PRs, issues</div><div class="ln" id="t2">→ reasoning over history</div></div></div>';
+  try{
+    setTimeout(function(){var t=$("t2");if(t)t.classList.add("on");},1200);
+    var g=await gatherContext(q);
+    var data=await CA.ai(mode, {repo:repo.owner+"/"+repo.repo, question:q, context:g.context});
+    renderAnswer(data, g.sources);
+  }catch(err){
+    if(/reasoning service|GEMINI|model|quota|rate-limit/i.test(err.message)) showErr(err.message+"  —  No backend key yet? Use ▶ Demo to preview the output.");
+    else showErr(err.message);
+  }
+}
+
+function badgeFor(d){
+  if(mode==="fence") return {cls:"risk",txt:"handle with care"};
+  if(mode==="fossil") return {cls:(d.verdict==="FOSSIL"?"warn":d.verdict==="ALIVE"?"ok":"info"),txt:d.verdict||"analysis"};
+  if(mode==="busfactor") return {cls:(d.riskLevel==="HIGH"?"risk":d.riskLevel==="MEDIUM"?"warn":"ok"),txt:(d.riskLevel||"risk")+" risk"};
+  return {cls:"info",txt:"answered"};
+}
+function renderAnswer(d, sources){
+  var b=badgeFor(d);
+  var pts=(d.points||[]).map(function(p){return '<li>'+esc(p)+'</li>';}).join("");
+  var srcs=(d.sources&&d.sources.length?d.sources:sources||[]);
+  var srcHtml=srcs.map(function(s){return '<a href="'+esc(s.url||"#")+'" target="_blank" rel="noopener">'+(s.sha?'<span class="sha">'+esc(s.sha)+'</span>':'◴')+' '+esc(s.label||s.url)+'</a>';}).join("");
+  $("out").innerHTML='<div class="answer"><div class="ah"><span class="badge '+b.cls+'">'+esc(b.txt)+'</span><h3>'+esc(d.title||LABELS[mode])+'</h3></div><div class="ab">'+
+    (d.summary?'<p class="summary">'+esc(d.summary)+'</p>':'')+
+    (d.risk?'<div class="riskline"><b>If removed:</b> '+esc(d.risk)+'</div>':'')+
+    (pts?'<ul class="pts">'+pts+'</ul>':'')+
+    (srcHtml?'<div class="srcs"><h4>Evidence from history</h4>'+srcHtml+'</div>':'')+
+    '<div class="note">Grounded in the repo\'s history — but it\'s a reading, not gospel. Open the sources to verify.</div></div></div>';
+}
+function showErr(m){ $("out").innerHTML='<div class="errbox">'+esc(m)+'</div>'; }
+
+/* settings */
+$("setBtn").onclick=function(){$("setModal").hidden=false;$("tokenInput").value=CA.token();};
+$("setClose").onclick=function(){$("setModal").hidden=true;};
+$("setSave").onclick=function(){CA.setToken($("tokenInput").value.trim());$("setModal").hidden=true;};
+
+/* boot */
+(function(){ var last=CA.lastRepo(); if(last){ $("repoInput").value=last; loadRepo(last); } })();
+</script>
+</body></html>

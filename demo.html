@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Demo — CodeArchaeologist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.demostage{border:1px solid var(--line-2);border-radius:14px;background:var(--editor);overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.5)}
+.demostage .top{height:40px;background:#161b22;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px;padding:0 14px}
+.demostage .top i{width:11px;height:11px;border-radius:50%;background:#30363d}.demostage .top i.r{background:#f85149}.demostage .top i.y{background:#d29922}.demostage .top i.g{background:#3fb950}
+.demostage .top .t{margin-left:12px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.narr{padding:22px 24px;border-bottom:1px solid var(--line);min-height:92px}
+.narr .step{font-family:var(--mono);font-size:11px;color:var(--violet-2);letter-spacing:.12em;text-transform:uppercase}
+.narr h2{margin:6px 0 6px;font-size:22px;font-weight:800;letter-spacing:-.01em}
+.narr p{margin:0;color:var(--dim);font-size:15px;max-width:70ch}
+.demobody{padding:22px 24px;min-height:220px}
+.democtrls{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;flex-wrap:wrap}
+.dots{display:flex;gap:7px}
+.dots i{width:9px;height:9px;border-radius:50%;background:var(--line-2);cursor:pointer;transition:.2s}
+.dots i.on{background:var(--violet);width:22px;border-radius:5px}
+</style>
+</head><body>
+
+<nav><div class="wrap nav-in">
+  <a href="index.html"><div class="logo"><span class="mk">&lt;/&gt;</span>CodeArchaeologist</div></a>
+  <div class="nav-links"><a href="explore.html">Explore</a><a href="timemachine.html">Time Machine</a><a href="preview.html">Preview</a><a href="quest.html">Quest</a></div>
+  <div class="nav-right"><a href="explore.html" class="btn btn-fill btn-sm">Try it for real →</a></div>
+</div></nav>
+
+<section class="apphead"><div class="wrap">
+  <div class="k">// guided demo</div>
+  <h1>See how it all works</h1>
+  <p>A quick tour of every feature using a sample repo. No GitHub repo or API key needed — just press play.</p>
+</div></section>
+
+<div class="wrap" style="padding-bottom:50px">
+  <div class="demostage">
+    <div class="top"><i class="r"></i><i class="y"></i><i class="g"></i><span class="t mono">demo · sample repo: acme/ledger</span></div>
+    <div class="narr"><div class="step" id="dStep"></div><h2 id="dTitle"></h2><p id="dNarr"></p></div>
+    <div class="demobody" id="dBody"></div>
+  </div>
+  <div class="democtrls">
+    <div style="display:flex;gap:10px"><button class="btn btn-sm" id="prevBtn">← Prev</button><button class="btn btn-sm" id="autoBtn">▶ Autoplay</button></div>
+    <div class="dots" id="dots"></div>
+    <button class="btn btn-fill btn-sm" id="nextBtn">Next →</button>
+  </div>
+</div>
+
+<footer><div class="wrap foot-in"><span>CODEARCHAEOLOGIST · guided demo</span><span>sample data, no key needed</span><span class="mono">demo</span></div></footer>
+
+<script src="app.js"></script>
+<script>
+function ans(cfg){
+  var pts=(cfg.points||[]).map(function(p){return '<li>'+esc(p)+'</li>';}).join("");
+  var srcs=(cfg.sources||[]).map(function(s){return '<a href="#" onclick="return false"><span class="sha">'+esc(s.sha)+'</span> '+esc(s.label)+'</a>';}).join("");
+  return '<div class="answer" style="margin-top:0"><div class="ah"><span class="badge '+(cfg.badgeCls||"info")+'">'+esc(cfg.badge||"answered")+'</span><h3>'+esc(cfg.title)+'</h3></div><div class="ab">'+
+    (cfg.summary?'<p class="summary">'+esc(cfg.summary)+'</p>':'')+
+    (cfg.risk?'<div class="riskline"><b>If removed:</b> '+esc(cfg.risk)+'</div>':'')+
+    (pts?'<ul class="pts">'+pts+'</ul>':'')+
+    (srcs?'<div class="srcs"><h4>Evidence from history</h4>'+srcs+'</div>':'')+'</div></div>';
+}
+function strata(layers){ return '<div class="answer" style="margin-top:0"><div class="ah"><span class="badge info">excavated</span><h3>queue.ts · how it evolved</h3></div><div class="ab"><div class="strata">'+
+  layers.map(function(l){return '<div class="layer"><div class="when">'+esc(l.when)+'</div><div class="what">'+esc(l.what)+'</div><div class="why">'+esc(l.why)+'</div></div>';}).join("")+'</div></div></div>'; }
+
+var STEPS=[
+  {step:"intro",title:"Point it at any repo",narr:"You give CodeArchaeologist a public GitHub repo. It reads the commits, pull requests and issues — the memory of the codebase — and lets you ask questions git-blame can't answer.",
+   body:'<div class="panelbox"><div class="ph"><span>github.com/acme/ledger</span><span class="mono">connected · 1,204 commits</span></div><div class="pb"><div class="qform"><input class="mono" value="why does write() go through a queue" readonly><button class="btn btn-fill">Analyze →</button></div></div></div>'},
+  {step:"ask why",title:"Ask why code exists",narr:"The core feature. It reconstructs the reasoning behind a line from the history — and links the exact commit and PR so you can verify it.",
+   body:ans({badge:"answered",title:"Why write() uses a queue",summary:"It was added to stop two workers writing at the same time and corrupting state. The queue forces writes to happen one at a time.",points:["Introduced in PR #412 after bug reports of lost updates","The worker pool (2022) made concurrent writes possible","Tests were added that fail without the queue"],sources:[{sha:"a3f91c2",label:"fix: serialise concurrent writes (#412)"},{sha:"77de0a1",label:"issue #398 — duplicate writes under load"}]})},
+  {step:"fence guard",title:"Chesterton's Fence Guard",narr:"Before you delete something, it warns you what that code protects — so you don't quietly reintroduce an old bug.",
+   body:ans({badge:"handle with care",badgeCls:"risk",title:"Before you remove the queue…",summary:"This queue is load-bearing. It exists specifically to prevent a data-corruption race.",risk:"Deleting it re-opens bug #398 — concurrent writes will interleave and corrupt records under load.",points:["It has no obvious caller, which is exactly why it looks removable","The race only shows up under concurrency, so tests may pass locally"],sources:[{sha:"a3f91c2",label:"the commit that added the fence"}]})},
+  {step:"fossil finder",title:"Fossil Finder",narr:"It spots dead and orphaned code and tells you the story of the abandoned feature it's left over from.",
+   body:ans({badge:"FOSSIL",badgeCls:"warn",title:"src/experimental/sync.ts looks abandoned",summary:"Left over from a real-time sync feature that was started in 2022 and never shipped.",points:["No imports reference it anywhere in the tree","Its PR was closed unmerged ('parking this for now')","No commits in 18 months"],sources:[{sha:"c21ab90",label:"PR #230 — WIP: realtime sync (closed)"}]})},
+  {step:"bus-factor",title:"Bus-Factor Map",narr:"It finds code only one person ever touched — the knowledge that walks out the door if they leave.",
+   body:ans({badge:"HIGH risk",badgeCls:"risk",title:"The billing module is a single-author zone",summary:"92% of src/billing/ was written by one contributor who hasn't committed in 4 months.",points:["Only @devlead has meaningful history here","No code review comments from anyone else","It handles money — the riskiest place to lose context"],sources:[{sha:"—",label:"authorship across 60 commits"}]})},
+  {step:"time machine",title:"Line Time-Machine",narr:"Pick a line and scrub it through its entire past — every version, with the reason for each change.",
+   body:strata([{when:"2024",what:"Renamed add() → enqueue()",why:"Clarity refactor — kept the behaviour"},{when:"2023",what:"Wrapped writes in a queue",why:"Fix the write race (#412)"},{when:"2022",what:"Added a worker pool",why:"Speed — accidentally caused the race"},{when:"2021",what:"Plain synchronous write",why:"Initial version, single-threaded"}])},
+  {step:"alternate history",title:"Alternate History",narr:"Ask what would have happened if a decision had gone the other way. Informed speculation, grounded in the real history.",
+   body:ans({badge:"counterfactual",badgeCls:"warn",title:"What if they hadn't added the queue?",summary:"The project would likely have shipped intermittent data corruption that's painful to reproduce.",points:["Bug #398 would have stayed open and grown","Users would see 'lost updates' under load","A fix would have been forced later, under pressure, probably as a bigger rewrite"],sources:[{sha:"77de0a1",label:"the bug that forced the decision"}]})},
+  {step:"change preview",title:"Change Preview",narr:"Describe a change and see how a static site would look — a real before/after render, scripts disabled for safety.",
+   body:'<div class="answer" style="margin-top:0"><div class="ah"><span class="badge ok">real render · HIGH confidence</span><h3>Before / after — "dark theme + green button"</h3></div><div class="ab"><div class="prevgrid">'+
+     '<div class="prevframe"><div class="lbl">before</div><iframe sandbox="" srcdoc="&lt;body style=\'font-family:sans-serif;background:#fff;color:#111;padding:20px\'&gt;&lt;h1&gt;acme ledger&lt;/h1&gt;&lt;button style=\'padding:10px 18px;background:#2f6df0;color:#fff;border:0;border-radius:6px\'&gt;Start&lt;/button&gt;&lt;/body&gt;"></iframe></div>'+
+     '<div class="prevframe"><div class="lbl">after (predicted)</div><iframe sandbox="" srcdoc="&lt;body style=\'font-family:sans-serif;background:#0d1117;color:#e6edf3;padding:20px\'&gt;&lt;h1&gt;acme ledger&lt;/h1&gt;&lt;button style=\'padding:10px 18px;background:#2ea043;color:#fff;border:0;border-radius:999px\'&gt;Start&lt;/button&gt;&lt;/body&gt;"></iframe></div>'+
+     '</div><div class="note">A sandboxed render of the predicted change. For build-step apps it gives a described prediction instead.</div></div></div>'},
+  {step:"repo quest",title:"Repo Quest — play &amp; learn",narr:"Finally, the fun part: a stylized 3D tomb where each relic uncovers a real piece of the repo's history, with a quick quiz at each checkpoint.",
+   body:'<div style="text-align:center;padding:16px 0"><div style="font-size:52px">⛏🏺</div><p style="color:var(--dim);max-width:52ch;margin:10px auto 18px">Explore a 3D tomb built from a repo\'s real commit history — collect every relic to reach the treasure.</p><a href="quest.html" class="btn btn-fill">Play the Quest →</a></div>'},
+  {step:"start",title:"Now try it on your own repo",narr:"Everything you just saw runs on any public GitHub repo, for free. Connect one and start digging.",
+   body:'<div style="text-align:center;padding:18px 0"><div class="cta-row" style="justify-content:center"><a href="explore.html" class="btn btn-fill" style="font-size:16px;padding:14px 26px">Connect a repo →</a><a href="quest.html" class="btn" style="font-size:16px;padding:14px 26px">Play the Quest</a></div></div>'}
+];
+
+var i=0, timer=null;
+function render(){
+  var s=STEPS[i];
+  $("dStep").textContent="step "+(i+1)+" / "+STEPS.length+" · "+s.step;
+  $("dTitle").innerHTML=s.title; $("dNarr").textContent=s.narr; $("dBody").innerHTML=s.body;
+  $("dBody").style.animation="none"; void $("dBody").offsetWidth; $("dBody").style.animation="fin .4s ease";
+  Array.prototype.forEach.call($("dots").children,function(d,x){d.classList.toggle("on",x===i);});
+  $("prevBtn").disabled=i===0; $("nextBtn").textContent=i===STEPS.length-1?"Restart":"Next →";
+}
+$("dots").innerHTML=STEPS.map(function(_,x){return '<i data-i="'+x+'"></i>';}).join("");
+$("dots").querySelectorAll("i").forEach(function(d){d.onclick=function(){stopAuto();i=+d.dataset.i;render();};});
+$("nextBtn").onclick=function(){ i=(i+1)%STEPS.length; render(); };
+$("prevBtn").onclick=function(){ if(i>0){i--;render();} };
+function stopAuto(){ if(timer){clearInterval(timer);timer=null;$("autoBtn").textContent="▶ Autoplay";} }
+$("autoBtn").onclick=function(){ if(timer){stopAuto();return;} $("autoBtn").textContent="⏸ Pause"; timer=setInterval(function(){ i=(i+1)%STEPS.length; render(); if(i===STEPS.length-1)stopAuto(); },3800); };
+render();
+</script>
+</body></html>

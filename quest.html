@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Repo Quest — CodeArchaeologist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<nav><div class="wrap nav-in">
+  <a href="index.html"><div class="logo"><span class="mk">&lt;/&gt;</span>CodeArchaeologist</div></a>
+  <div class="nav-links"><a href="explore.html">Explore</a><a href="timemachine.html">Time Machine</a><a href="preview.html">Preview</a><a href="quest.html" class="active">Quest</a></div>
+  <div class="nav-right"><a href="demo.html" class="btn btn-sm">▶ Demo</a></div>
+</div></nav>
+
+<section class="apphead"><div class="wrap">
+  <div class="k">// play + learn</div>
+  <h1>Repo Quest</h1>
+  <p>Explore a 3D tomb. Each glowing relic is a checkpoint that uncovers a real piece of a repo's history — collect them all and reach the treasure.</p>
+  <div class="connectbar">
+    <form class="repo-inp" onsubmit="loadRepo(event)"><span class="pre mono">github.com/</span><input class="mono" id="repoInput" placeholder="owner/repo (optional)" autocomplete="off"><button type="submit">Load history</button></form>
+    <span class="pill" id="repoPill" hidden>◴ <b id="repoName"></b></span>
+  </div>
+</div></section>
+
+<div class="wrap" style="padding-bottom:50px">
+  <div class="gamewrap" id="gamewrap">
+    <canvas id="gamecanvas"></canvas>
+    <div class="hud"><span class="lvl" id="hudLvl">The Antechamber</span><span class="arte" id="hudArte">relics 0 / 0</span></div>
+    <div class="gameoverlay" id="startOverlay"><div class="card">
+      <h3>⛏ Enter the Repo Tomb</h3>
+      <p id="startSub">Move with the arrow keys. Reach each glowing relic to uncover a piece of the repo's history. Collect them all to find the treasure.</p>
+      <button class="btn btn-fill" id="startBtn" style="font-size:16px;padding:13px 26px">Begin the dig →</button>
+      <div class="ctrls"><kbd>←</kbd> <kbd>→</kbd> move &nbsp;·&nbsp; <kbd>space</kbd> / <kbd>↑</kbd> jump</div>
+    </div></div>
+    <div class="gameoverlay" id="cpOverlay" hidden><div class="checkpoint" id="cpCard"></div></div>
+    <div class="gameoverlay" id="winOverlay" hidden><div class="card">
+      <h3>🏆 You reached the treasure!</h3>
+      <p id="winSub">You uncovered the repo's whole story.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn btn-fill" id="replayBtn">Dig again</button><a href="explore.html" class="btn">Explore for real →</a></div>
+    </div></div>
+  </div>
+  <div class="ctrls" style="margin-top:14px">Stylized 3D built with WebGL (Three.js). Load a repo above to generate checkpoints from its real history, or play the demo tomb.</div>
+</div>
+
+<footer><div class="wrap foot-in"><span>CODEARCHAEOLOGIST</span><span>play + learn</span><span class="mono">repo quest · 3D</span></div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="app.js"></script>
+<script>
+/* ---------------- checkpoint content ---------------- */
+var DEMO_LEVELS=[
+  {title:"The Antechamber",era:"2021",fact:"Every repo starts with an initial commit. Here the project was a single file — simple, with no queue and no tests yet.",question:"What marks a repo's beginning?",options:["The first release","The initial commit","The first star"],answer:1},
+  {title:"The Worker Hall",era:"2022",fact:"A worker pool was added for speed — but it quietly introduced a race condition when two workers wrote at once.",question:"What did the worker pool accidentally add?",options:["A memory leak","A race condition","A syntax error"],answer:1},
+  {title:"The Queue Chamber",era:"2023",fact:"PR #412 introduced a queue so writes happen one at a time. This is the 'fence' — removing it would bring the race back.",question:"Why was the queue added?",options:["To look clever","To serialise writes","To save memory"],answer:1},
+  {title:"The Refactor Crypt",era:"2024",fact:"The API was renamed for clarity, but the queue — and the reason for it — was carefully kept.",question:"What survived the refactor?",options:["The race condition","The queue's purpose","The old names"],answer:1}
+];
+var LEVELS=DEMO_LEVELS, repo=null;
+
+function loadRepo(e){ if(e)e.preventDefault(); var v=$("repoInput").value.trim(); if(!v)return; CA.setRepo(v); var p=CA.parseRepo(v); if(!p)return;
+  repo=p; $("repoName").textContent=p.owner+"/"+p.repo; $("repoPill").hidden=false; $("startSub").textContent="Generating a tomb from "+p.owner+"/"+p.repo+"'s real history…";
+  (async function(){ try{
+    var commits=await CA.commits(p.owner,p.repo,{per_page:30});
+    var ctx="COMMITS (newest first):\n"+commits.map(function(c){return "- "+fmtDate(c.commit.author.date)+": "+(c.commit.message||"").split("\n")[0];}).join("\n");
+    var data=await CA.ai("quest",{repo:p.owner+"/"+p.repo,context:ctx});
+    if(data.levels&&data.levels.length){ LEVELS=data.levels.slice(0,6); $("startSub").textContent="Tomb ready — "+LEVELS.length+" chambers from "+p.owner+"/"+p.repo+"'s history."; }
+  }catch(err){ $("startSub").textContent="Couldn't load that repo's history (using the demo tomb). "+err.message; } })();
+}
+
+/* ---------------- 3D game ---------------- */
+var canvas=$("gamecanvas"), renderer, scene, camera, player, relics=[], platforms=[], torchLights=[];
+var keys={}, vy=0, grounded=true, worldEnd=0, running=false, nextCp=0, collected=0, walkPhase=0;
+var GROUND_Y=0, GRAV=-0.018, JUMP=0.34, SPEED=0.12;
+
+function init3D(){
+  renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a0710); scene.fog=new THREE.Fog(0x0a0710,14,38);
+  camera=new THREE.PerspectiveCamera(52,1,0.1,120); camera.position.set(0,3.4,11);
+
+  scene.add(new THREE.AmbientLight(0x4a3a66,0.55));
+  var key=new THREE.DirectionalLight(0xffd9a0,0.5); key.position.set(-6,12,8); key.castShadow=true;
+  key.shadow.mapSize.set(1024,1024); key.shadow.camera.left=-30; key.shadow.camera.right=30; key.shadow.camera.top=20; key.shadow.camera.bottom=-10; scene.add(key);
+
+  // floor
+  var floorMat=new THREE.MeshStandardMaterial({color:0x2a2030,roughness:.95});
+  worldEnd=(LEVELS.length+1)*14;
+  var floor=new THREE.Mesh(new THREE.BoxGeometry(worldEnd+30,1,8),floorMat);
+  floor.position.set(worldEnd/2-7,-0.5,0); floor.receiveShadow=true; scene.add(floor);
+  // back wall + pillars for depth
+  var wallMat=new THREE.MeshStandardMaterial({color:0x241b2e,roughness:1});
+  var wall=new THREE.Mesh(new THREE.BoxGeometry(worldEnd+30,16,1),wallMat); wall.position.set(worldEnd/2-7,6,-3.6); wall.receiveShadow=true; scene.add(wall);
+  var pillarMat=new THREE.MeshStandardMaterial({color:0x3a2c46,roughness:.9});
+  for(var x=-4;x<worldEnd;x+=7){
+    var pil=new THREE.Mesh(new THREE.BoxGeometry(1.1,10,1.1),pillarMat); pil.position.set(x,4.5,-2.6); pil.castShadow=true; pil.receiveShadow=true; scene.add(pil);
+    addTorch(x+0.1,5.2,-2.0);
+  }
+  // a few platforms to jump on
+  var pmat=new THREE.MeshStandardMaterial({color:0x4a3a2a,roughness:.9});
+  [ [10,1.4],[24,2.1],[38,1.6],[52,2.3] ].forEach(function(pz){
+    var pw=3.2, pl=new THREE.Mesh(new THREE.BoxGeometry(pw,0.6,3),pmat); pl.position.set(pz[0],pz[1],0); pl.castShadow=true; pl.receiveShadow=true; scene.add(pl);
+    platforms.push({x:pz[0],w:pw,top:pz[1]+0.3});
+  });
+
+  // player (stylized low-poly explorer)
+  player=new THREE.Group();
+  var skin=0xe0b088, cloth=0x6f42c1, cloth2=0x8257e5;
+  var torso=mesh(new THREE.BoxGeometry(0.6,0.8,0.4),cloth); torso.position.y=1.1; player.add(torso);
+  var head=mesh(new THREE.SphereGeometry(0.28,16,16),skin); head.position.y=1.75; player.add(head);
+  var hat=mesh(new THREE.CylinderGeometry(0.34,0.36,0.14,16),0x3a2c1a); hat.position.y=1.92; player.add(hat);
+  var brim=mesh(new THREE.CylinderGeometry(0.5,0.5,0.05,16),0x3a2c1a); brim.position.y=1.85; player.add(brim);
+  player.armL=mesh(new THREE.BoxGeometry(0.18,0.6,0.18),cloth2); player.armL.position.set(-0.4,1.15,0); player.add(player.armL);
+  player.armR=mesh(new THREE.BoxGeometry(0.18,0.6,0.18),cloth2); player.armR.position.set(0.4,1.15,0); player.add(player.armR);
+  player.legL=mesh(new THREE.BoxGeometry(0.2,0.7,0.2),0x2a2238); player.legL.position.set(-0.17,0.45,0); player.add(player.legL);
+  player.legR=mesh(new THREE.BoxGeometry(0.2,0.7,0.2),0x2a2238); player.legR.position.set(0.17,0.45,0); player.add(player.legR);
+  // a little torch in hand
+  var torch=mesh(new THREE.CylinderGeometry(0.04,0.04,0.4,8),0x5a3a1a); torch.position.set(0.5,1.4,0.1); torch.rotation.z=-0.5; player.add(torch);
+  var flame=mesh(new THREE.SphereGeometry(0.1,8,8),0xffb347); flame.material.emissive=new THREE.Color(0xff8c1a); flame.material.emissiveIntensity=2; flame.position.set(0.66,1.6,0.1); player.add(flame);
+  var plight=new THREE.PointLight(0xffa64d,1.3,8); plight.position.set(0.66,1.7,0.3); player.add(plight); player.plight=plight;
+  player.position.set(0,GROUND_Y,0); player.traverse(function(o){if(o.isMesh){o.castShadow=true;}}); scene.add(player);
+
+  // relics at each level checkpoint
+  buildRelics();
+  resize(); addEventListener("resize",resize);
+  requestAnimationFrame(loop);
+}
+function mesh(g,c){ return new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.7})); }
+function addTorch(x,y,z){
+  var t=mesh(new THREE.CylinderGeometry(0.06,0.06,0.6,8),0x3a2a1a); t.position.set(x,y,z); scene.add(t);
+  var fl=mesh(new THREE.SphereGeometry(0.14,8,8),0xffb347); fl.material.emissive=new THREE.Color(0xff8c1a); fl.material.emissiveIntensity=2.2; fl.position.set(x,y+0.4,z); scene.add(fl);
+  var pl=new THREE.PointLight(0xff9a3d,1.1,9); pl.position.set(x,y+0.5,z+0.4); scene.add(pl); torchLights.push({light:pl,flame:fl,base:1.1});
+}
+function buildRelics(){
+  relics.forEach(function(r){scene.remove(r.group);}); relics=[];
+  for(var i=0;i<LEVELS.length;i++){
+    var x=(i+1)*14;
+    var grp=new THREE.Group();
+    var core=mesh(new THREE.OctahedronGeometry(0.5),0x7ee787); core.material.emissive=new THREE.Color(0x3fb950); core.material.emissiveIntensity=1.1; grp.add(core);
+    var ring=mesh(new THREE.TorusGeometry(0.8,0.06,12,32),0xbc8cff); ring.material.emissive=new THREE.Color(0xa371f7); ring.material.emissiveIntensity=1; ring.rotation.x=Math.PI/2; grp.add(ring);
+    var gl=new THREE.PointLight(0x7ee787,1.6,7); grp.add(gl);
+    grp.position.set(x,1.7,0); scene.add(grp);
+    relics.push({group:grp,core:core,ring:ring,x:x,done:false,level:i});
+  }
+  // final treasure
+  var tr=new THREE.Group();
+  var chest=mesh(new THREE.BoxGeometry(1.3,0.9,0.9),0x8a5a1a); chest.position.y=0.45; tr.add(chest);
+  var lid=mesh(new THREE.BoxGeometry(1.35,0.4,0.95),0xb5791a); lid.position.y=1.0; tr.add(lid);
+  var glow=new THREE.PointLight(0xffd23f,2,9); glow.position.y=1.2; tr.add(glow);
+  tr.position.set(worldEnd,0.1,0); scene.add(tr); window._treasure=tr;
+}
+
+function resize(){ var r=canvas.getBoundingClientRect(); var w=Math.max(r.width,10),h=Math.max(r.height,10);
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+
+addEventListener("keydown",function(e){ keys[e.key]=true; if([" ","ArrowUp","ArrowLeft","ArrowRight","ArrowDown"].indexOf(e.key)>-1 && running)e.preventDefault(); });
+addEventListener("keyup",function(e){ keys[e.key]=false; });
+
+function loop(){
+  requestAnimationFrame(loop);
+  var t=performance.now()/1000;
+  // torch flicker
+  torchLights.forEach(function(o){ o.light.intensity=o.base+Math.sin(t*12+o.light.position.x)*0.35+Math.random()*0.08; });
+  if(player&&player.plight) player.plight.intensity=1.3+Math.sin(t*14)*0.3;
+  // relic spin
+  relics.forEach(function(r){ if(r.done)return; r.core.rotation.y+=0.03; r.core.rotation.x+=0.012; r.ring.rotation.z+=0.02; r.group.position.y=1.7+Math.sin(t*2+r.x)*0.12; });
+  if(window._treasure) window._treasure.rotation.y+=0.006;
+
+  if(running){
+    var moving=false;
+    if(keys["ArrowLeft"]||keys["a"]){ player.position.x-=SPEED; player.rotation.y=Math.PI; moving=true; }
+    if(keys["ArrowRight"]||keys["d"]){ player.position.x+=SPEED; player.rotation.y=0; moving=true; }
+    if((keys[" "]||keys["ArrowUp"]||keys["w"])&&grounded){ vy=JUMP; grounded=false; }
+    // gravity
+    vy+=GRAV; player.position.y+=vy;
+    // ground / platform collision
+    var groundY=GROUND_Y;
+    platforms.forEach(function(p){ if(Math.abs(player.position.x-p.x)<p.w/2+0.3 && player.position.y<=p.top+0.02 && player.position.y>p.top-1.2 && vy<=0){ groundY=Math.max(groundY,p.top); } });
+    if(player.position.y<=groundY){ player.position.y=groundY; vy=0; grounded=true; } else grounded=false;
+    if(player.position.x<0) player.position.x=0;
+    // walk anim
+    if(moving&&grounded){ walkPhase+=0.3; } else walkPhase*=0.8;
+    player.legL.rotation.x=Math.sin(walkPhase)*0.6; player.legR.rotation.x=-Math.sin(walkPhase)*0.6;
+    player.armL.rotation.x=-Math.sin(walkPhase)*0.4; player.armR.rotation.x=Math.sin(walkPhase)*0.4;
+    if(!moving) player.position.y+=Math.sin(t*3)*0.003; // idle bob
+
+    // camera follow
+    camera.position.x += (player.position.x - camera.position.x)*0.08;
+    camera.lookAt(player.position.x, 1.6, 0);
+
+    // checkpoint collision
+    for(var i=0;i<relics.length;i++){ var r=relics[i];
+      if(!r.done && Math.abs(player.position.x-r.x)<0.9){ triggerCheckpoint(r); break; } }
+    // treasure
+    if(collected>=LEVELS.length && Math.abs(player.position.x-worldEnd)<1.2){ win(); }
+  }
+  renderer.render(scene,camera);
+}
+
+function triggerCheckpoint(r){
+  running=false; var L=LEVELS[r.level];
+  $("hudLvl").textContent=L.title||("Chamber "+(r.level+1));
+  var opts=(L.options||[]).map(function(o,i){return '<button data-i="'+i+'">'+esc(o)+'</button>';}).join("");
+  $("cpCard").innerHTML='<div class="era">'+esc(L.era||"")+' · chamber '+(r.level+1)+'/'+LEVELS.length+'</div>'+
+    '<h3>'+esc(L.title||"A relic")+'</h3><div class="fact">'+esc(L.fact||"")+'</div>'+
+    (L.question?'<div class="quiz">'+esc(L.question)+'</div><div class="qopts" id="qopts">'+opts+'</div>':'<button class="btn btn-fill" id="cpContinue">Take the relic →</button>');
+  $("cpOverlay").hidden=false;
+  if(L.question){
+    $("qopts").querySelectorAll("button").forEach(function(b){ b.onclick=function(){
+      var i=+b.dataset.i, correct=(L.answer!=null?L.answer:0);
+      if(i===correct){ b.classList.add("right"); setTimeout(function(){collect(r);},550); }
+      else { b.classList.add("wrong"); var cb=$("qopts").querySelector('[data-i="'+correct+'"]'); if(cb)cb.classList.add("right"); setTimeout(function(){collect(r);},900); }
+      $("qopts").querySelectorAll("button").forEach(function(x){x.disabled=true;});
+    };});
+  } else { $("cpContinue").onclick=function(){collect(r);}; }
+}
+function collect(r){
+  r.done=true; scene.remove(r.group); collected++;
+  $("hudArte").textContent="relics "+collected+" / "+LEVELS.length;
+  $("cpOverlay").hidden=true; running=true;
+}
+function win(){ running=false; $("winOverlay").hidden=false; }
+
+/* overlays */
+$("startBtn").onclick=function(){ $("startOverlay").hidden=true; running=true; $("hudArte").textContent="relics 0 / "+LEVELS.length; };
+$("replayBtn").onclick=function(){ location.reload(); };
+
+/* boot */
+(function(){ var last=CA.lastRepo(); if(last){ $("repoInput").value=last; }
+  if(window.THREE){ init3D(); } else { $("startSub").textContent="WebGL/Three.js couldn't load — the 3D game needs a modern browser."; }
+})();
+</script>
+</body></html>

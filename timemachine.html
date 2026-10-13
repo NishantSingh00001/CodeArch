@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Time Machine — CodeArchaeologist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<nav><div class="wrap nav-in">
+  <a href="index.html"><div class="logo"><span class="mk">&lt;/&gt;</span>CodeArchaeologist</div></a>
+  <div class="nav-links"><a href="explore.html">Explore</a><a href="timemachine.html" class="active">Time Machine</a><a href="preview.html">Preview</a><a href="quest.html">Quest</a></div>
+  <div class="nav-right"><a href="demo.html" class="btn btn-sm">▶ Demo</a></div>
+</div></nav>
+
+<section class="apphead"><div class="wrap">
+  <div class="k">// travel through a file's past</div>
+  <h1>Time Machine</h1>
+  <p>Scrub a file or line through its whole history, or ask what would have happened if a decision had gone the other way.</p>
+  <div class="connectbar">
+    <form class="repo-inp" onsubmit="connect(event)"><span class="pre mono">github.com/</span><input class="mono" id="repoInput" placeholder="owner/repo" autocomplete="off"><button type="submit">Connect</button></form>
+    <span class="pill" id="repoPill" hidden>◴ <b id="repoName"></b></span>
+  </div>
+</div></section>
+
+<div class="wrap">
+  <div class="modebar">
+    <button class="on" data-mode="timemachine">⏱ Line Time-Machine</button>
+    <button data-mode="whatif">⑂ Alternate History</button>
+  </div>
+  <div class="panelbox">
+    <div class="ph"><span id="phLabel">Line Time-Machine</span><span class="mono" id="ctxInfo"></span></div>
+    <div class="pb">
+      <div class="qform">
+        <input id="qInput" placeholder="A file path, e.g. src/queue.ts">
+        <button class="btn btn-fill" id="runBtn">Excavate →</button>
+      </div>
+      <div class="suggest" id="suggest"></div>
+      <div id="out"></div>
+      <div class="note" id="baseNote">Connect a repo, then give a file path. Line Time-Machine reads every commit that touched it and narrates the layers.</div>
+    </div>
+  </div>
+</div>
+
+<footer><div class="wrap foot-in"><span>CODEARCHAEOLOGIST</span><span>a reading of history, not gospel</span><span class="mono">time machine</span></div></footer>
+
+<script src="app.js"></script>
+<script>
+var mode="timemachine", repo=null;
+var LABELS={timemachine:"Line Time-Machine — how this evolved",whatif:"Alternate History — what if it hadn't happened"};
+var PLACE={timemachine:"A file path, e.g. src/queue.ts",whatif:"A decision or file, e.g. 'why they added the queue' or src/queue.ts"};
+var SUG={timemachine:["src/index.js","README.md","package.json"],whatif:["What if they hadn't added the queue?","What if the auth rewrite never happened?","src/core/scheduler.js"]};
+function setMode(m){mode=m;document.querySelectorAll(".modebar button").forEach(function(b){b.classList.toggle("on",b.dataset.mode===m);});
+  $("phLabel").textContent=LABELS[m];$("qInput").placeholder=PLACE[m];$("runBtn").textContent=(m==="timemachine"?"Excavate →":"Imagine →");
+  $("suggest").innerHTML=SUG[m].map(function(s){return '<button>'+esc(s)+'</button>';}).join("");
+  $("suggest").querySelectorAll("button").forEach(function(b){b.onclick=function(){$("qInput").value=b.textContent;};});$("out").innerHTML="";}
+document.querySelector(".modebar").addEventListener("click",function(e){var b=e.target.closest("button");if(b)setMode(b.dataset.mode);});
+if(location.hash==="#whatif")setMode("whatif");else setMode("timemachine");
+
+function connect(e){if(e)e.preventDefault();var v=$("repoInput").value.trim();if(!v)return;CA.setRepo(v);loadRepo(v);}
+async function loadRepo(v){var p=CA.parseRepo(v);if(!p){showErr("Enter owner/repo.");return;}repo=p;$("ctxInfo").textContent="loading…";
+  try{await CA.repoInfo(p.owner,p.repo);$("repoPill").hidden=false;$("repoName").textContent=p.owner+"/"+p.repo;$("ctxInfo").textContent="connected";}
+  catch(err){$("ctxInfo").textContent="";showErr(err.message);}}
+
+async function gather(q){
+  var p=repo,lines=[];
+  var path=/\.[a-z]{1,5}$/i.test(q.trim())||q.indexOf("/")>-1 ? q.trim() : "";
+  var commits=await CA.commits(p.owner,p.repo, path?{per_page:30,path:path}:{per_page:30});
+  lines.push("COMMIT HISTORY"+(path?" for "+path:"")+" (newest first):");
+  commits.forEach(function(c){lines.push("- "+c.sha.slice(0,7)+" ("+fmtDate(c.commit.author.date)+"): "+(c.commit.message||"").split("\n")[0]);});
+  try{var iss=await CA.searchIssues(p.owner,p.repo, path?path.split("/").pop():q);if(iss.items){lines.push("\nRELATED PRs/ISSUES:");iss.items.slice(0,8).forEach(function(it){lines.push("- #"+it.number+" "+it.title);});}}catch(e){}
+  return {context:lines.join("\n"),sources:commits.slice(0,5).map(function(c){return {label:(c.commit.message||"").split("\n")[0],url:c.html_url,sha:c.sha.slice(0,7)};})};
+}
+
+$("runBtn").onclick=run;$("qInput").addEventListener("keydown",function(e){if(e.key==="Enter")run();});
+async function run(){
+  if(!repo){showErr("Connect a repo first.");return;}
+  var q=$("qInput").value.trim();if(!q){showErr("Enter a file path or a decision to explore.");return;}
+  $("out").innerHTML='<div class="loadwrap"><div class="spin"></div><div>digging through the layers…</div></div>';
+  try{var g=await gather(q);var data=await CA.ai(mode,{repo:repo.owner+"/"+repo.repo,question:q,context:g.context});
+    if(mode==="timemachine")renderStrata(data,g.sources);else renderWhatIf(data,g.sources);}
+  catch(err){showErr(err.message+(/service|GEMINI|model|quota|rate/i.test(err.message)?"  —  No backend key yet? Use ▶ Demo.":""));}
+}
+function renderStrata(d,sources){
+  var layers=(d.layers||[]).map(function(l){return '<div class="layer"><div class="when">'+esc(l.when||"")+'</div><div class="what">'+esc(l.what||"")+'</div><div class="why">'+esc(l.why||"")+'</div></div>';}).join("");
+  var srcs=(d.sources&&d.sources.length?d.sources:sources||[]);
+  var srcHtml=srcs.map(function(s){return '<a href="'+esc(s.url||"#")+'" target="_blank" rel="noopener"><span class="sha">'+esc(s.sha||"◴")+'</span> '+esc(s.label||s.url)+'</a>';}).join("");
+  $("out").innerHTML='<div class="answer"><div class="ah"><span class="badge info">excavated</span><h3>'+esc(d.title||"How this evolved")+'</h3></div><div class="ab">'+
+    (d.summary?'<p class="summary">'+esc(d.summary)+'</p>':'')+(layers?'<div class="strata">'+layers+'</div>':'')+
+    (srcHtml?'<div class="srcs" style="margin-top:16px"><h4>Commits</h4>'+srcHtml+'</div>':'')+'</div></div>';
+}
+function renderWhatIf(d,sources){
+  var pts=(d.points||[]).map(function(p){return '<li>'+esc(p)+'</li>';}).join("");
+  var srcs=(d.sources&&d.sources.length?d.sources:sources||[]);
+  var srcHtml=srcs.map(function(s){return '<a href="'+esc(s.url||"#")+'" target="_blank" rel="noopener"><span class="sha">'+esc(s.sha||"◴")+'</span> '+esc(s.label||s.url)+'</a>';}).join("");
+  $("out").innerHTML='<div class="answer"><div class="ah"><span class="badge warn">counterfactual</span><h3>'+esc(d.title||"Alternate history")+'</h3></div><div class="ab">'+
+    (d.summary?'<p class="summary">'+esc(d.summary)+'</p>':'')+(pts?'<ul class="pts">'+pts+'</ul>':'')+
+    (srcHtml?'<div class="srcs"><h4>What actually happened</h4>'+srcHtml+'</div>':'')+
+    '<div class="note">A reasoned counterfactual from the real history — informed speculation, not fact.</div></div></div>';
+}
+function showErr(m){$("out").innerHTML='<div class="errbox">'+esc(m)+'</div>';}
+(function(){var last=CA.lastRepo();if(last){$("repoInput").value=last;loadRepo(last);}})();
+</script>
+</body></html>
